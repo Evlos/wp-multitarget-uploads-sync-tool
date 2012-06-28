@@ -8,31 +8,56 @@ Version: 2.0.0
 Author URI: http://www.rainmoe.com/
 */
 
-function MUSTtar() {
-	return array(
-		'Ftp' => array(
-			'Info' => array(
-				'Username', 'Password'
-			),
+MUST::ins();
+
+class MUST {
+
+private static $tar = array(
+	'Ftp' => array(
+		'Info' => array(
+			'Host', 'Username', 'Password', 'Folder'
 		),
-	);
+	),
+);
+
+private static $name = 'MUST';
+private static $ins;
+private $opt;
+
+private function __construct() {
+	$this->wpInit();
+	$this->updateOpt();
 }
-function MUSTaddStyle() {
+public static function ins() {
+	if (is_null(self::$ins))
+		self::$ins = new self();
+	return self::$ins;
+}
+
+public function updateOpt() {
+	if (!$this->opt = get_option(self::$name.'_option')) {
+		$this->opt = '';
+		update_option(self::$name.'_option', '');
+	}
+}
+public function wpInit() {
+	add_action('admin_menu', array($this, 'adminMenu'));
+}
+public function addStyle() {
 	wp_enqueue_style('/wp-admin/css/colors-classic.css');
 }
-function MUSTshowTargets() {
+public function showTar($id) {
 	return 'No Targets';
 }
 
-add_action('admin_menu','MUSTadminMenu');
-function MUSTadminMenu() {
-	$page = add_menu_page('WP-MUST','WP-MUST','administrator',__FILE__,'MUSTpageA');
-	add_action('admin_print_styles-'.$page, 'MUSTaddStyle');
-	$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, 'MUSTpageA');
-	$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageB', 'MUSTpageB');
-	add_action('admin_print_styles-'.$page, 'MUSTaddStyle');
+public function adminMenu() {
+	$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
+	add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
+	$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
+	$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageB', array($this, 'pageB'));
+	add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 }
-function MUSTpageA() {
+public function pageA() {
 	?>
 	<div style="margin: 4px 15px 0 0;">
 	<h2>WP-MultiTarget-Uploads-Sync-Tool</h2>
@@ -48,15 +73,14 @@ function MUSTpageA() {
 		foreach ($data as $val) {
 			echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
 			<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td>'.$val->post_mime_type.'</td>
-			<td><a target="_blank" href="'.$val->guid.'">'.$val->guid.'</a></td><td>'.MUSTshowTargets($val->ID).'</td></tr>';
+			<td><a target="_blank" href="'.$val->guid.'">'.$val->guid.'</a></td><td>'.$this->showTar($val->ID).'</td></tr>';
 		}
 		?>
 	</table>
 	</div>
 	<?php
 }
-function MUSTpageB() {
-	$targets = MUSTtar();
+public function pageB() {
 	$count = 1;
 	?>
 	<div style="margin: 4px 15px 0 0;">
@@ -70,12 +94,12 @@ function MUSTpageB() {
 					<td>Ftp</td>
 					<td><table class="widefat">
 						<thead>
-						<?php foreach ($targets['Ftp']['Info'] as $val): ?>
+						<?php foreach (self::$tar['Ftp']['Info'] as $val): ?>
 							<th><?php echo $val; ?></th>
 						<?php endforeach; ?>
 						</thead>
 						<tr>
-						<?php foreach ($targets['Ftp']['Info'] as $val): ?>
+						<?php foreach (self::$tar['Ftp']['Info'] as $val): ?>
 							<td><input type="text" name="<?php echo $val; ?>-<?php echo $count; ?>" /></td>
 						<?php endforeach; ?>
 						</tr>
@@ -86,7 +110,7 @@ function MUSTpageB() {
 	</div>
 	<div>
 		<form>
-			<select name="type"><?php foreach ($targets as $key => $val) : ?>
+			<select name="type"><?php foreach (self::$tar as $key => $val) : ?>
 				<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
 			<?php endforeach; ?></select>
 			<input type="submit" />
@@ -94,4 +118,6 @@ function MUSTpageB() {
 	</div>
 	</div>
 	<?php
+}
+
 }
