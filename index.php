@@ -12,160 +12,305 @@ MUST::ins();
 
 class MUST {
 
-private static $name = 'MUST';
-private static $ins;
-private static $addons = array(
-	'ftp' => 'MUST_ftp',
-);
-private $opt;
-
-private function __construct() {
-	$this->wpInit();
-	$this->updateOpt();
-}
-public static function ins() {
-	if (is_null(self::$ins))
-		self::$ins = new self();
-	return self::$ins;
-}
-
-public static function arrayRewrite($default, $changed) {
-	foreach ($default as $key => $val) {
-		if (isset($changed[$key])) $default[$key] = $changed[$key];
-	}
-	return $default;
-}
-public static function zip($data) {
-	return json_encode($data);
-}
-public static function unzip($data) {
-	return json_decode($data, true);
-}
-public static function singleOpt($data = array()) {
-	$opt = array(
-		'name' => '',
-		'type' => '',
-		'conn' => '',
+	private static $name = 'MUST';
+	private static $ins;
+	private static $addons = array(
+		'ftp' => 'MUST_ftp',
 	);
-	return self::arrayRewrite($opt, $changed);
-}
 
-public function getOpt() {
-	$opt = get_option(self::$name.'_option');
-	return empty($opt) ? array() : $opt;
-}
-public function putOpt($data) {
-	return update_option(self::$name.'_option', $data);
-}
-
-public function updateOpt() {
-	if (!$this->opt = get_option(self::$name.'_option')) {
-		$this->opt = '';
-		update_option(self::$name.'_option', '');
+	private function __construct() {
+		$this->wpInit();
+		$this->createOpt();
 	}
-}
-public function wpInit() {
-	add_action('admin_menu', array($this, 'adminMenu'));
-}
-public function addStyle() {
-	wp_enqueue_style('/wp-admin/css/colors-classic.css');
-}
-public function showTar($id) {
-	return 'No Targets';
-}
+	public static function ins() {
+		if (is_null(self::$ins))
+			self::$ins = new self();
+		return self::$ins;
+	}
 
-public function adminMenu() {
-	$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
-	add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
-	$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
-	$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageB', array($this, 'pageB'));
-	add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
-}
-public function pageA() {
-	?>
-	<div style="margin: 4px 15px 0 0;">
-	<h2>WP-MultiTarget-Uploads-Sync-Tool</h2>
-	<table class="widefat">
-		<?php
+	public static function arrayRewrite($default, $changed) {
+		foreach ($default as $key => $val) {
+			if (isset($changed[$key])) $default[$key] = $changed[$key];
+		}
+		return $default;
+	}
+	public static function zip($data) {
+		return json_encode($data);
+	}
+	public static function unzip($data) {
+		return json_decode($data, true);
+	}
+	public static function singleOpt($changed = array()) {
+		$opt = array(
+			'name' => '',
+			'type' => '',
+			'conn' => '',
+			'enable' => 0
+		);
+		return self::arrayRewrite($opt, $changed);
+	}
+
+	public function getOpt() {
+		$opt = get_option(self::$name.'_option', '');
+		return empty($opt) ? array() : json_decode($opt, true);
+	}
+	public function refreshOpt() {
+		//Notice
+	}
+	public function putOpt($changed) {
+		$res = update_option(self::$name.'_option', json_encode($changed));
+		$this->refreshOpt();
+		return $res;
+	}
+	public function getMT() {
+		return get_option(self::$name.'_mtarget');
+	}
+	public function putMT($data) {
+		return update_option(self::$name.'_mtarget', $data);
+	}
+	public function getPM($pid, $key) {
+		return get_post_meta($pid, $key, true);
+	}
+	public function putPM($pid, $key, $data) {
+		update_post_meta($pid, $key, $data);
+	}
+	
+	public function singlePS($changed = array()) {
+		$opt = $this->getOpt();
+		foreach ($opt as $key_ => $val_) {
+			$ps[$key_] = 0;
+		}
+		return self::arrayRewrite($ps, $changed);
+	}
+	public function writePS($pid, $data = array()) {
+		return $this->putPM($pid, self::$name.'_poststatus', json_encode($this->singlePS($data)));
+	}
+	public function readPS($pid) {
+		$ps = $this->getPM($pid, self::$name.'_poststatus');
+		if (empty($ps)) {
+			$this->writePS($pid);
+			return $this->singlePS();
+		}
+		else {
+			return json_decode($ps);
+		}
+	}
+	
+	public function createOpt() {
+		if (!$this->opt = get_option(self::$name.'_option')) {
+			update_option(self::$name.'_option', '');
+		}
+	}
+	public function wpInit() {
+		add_action('admin_menu', array($this, 'adminMenu'));
+	}
+	public function addStyle() {
+		wp_enqueue_style('/wp-admin/css/colors-classic.css');
+	}
+	
+	public static function readAttachments() {
 		global $wpdb;
-		$data = array_reverse($wpdb->get_results("
+		return array_reverse($wpdb->get_results("
 			SELECT * FROM {$wpdb->posts}
 			WHERE post_status = 'inherit' AND post_type = 'attachment'
 		"));
-		
-		echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Mime</th><th>Guid</th><th>Control</th></thead>';
-		foreach ($data as $val) {
-			echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
-			<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td>'.$val->post_mime_type.'</td>
-			<td><a target="_blank" href="'.$val->guid.'">'.$val->guid.'</a></td><td>'.$this->showTar($val->ID).'</td></tr>';
+	}
+	
+	public function upload() {
+		$opt = $this->getOpt();
+		foreach ($opt as $key => $val) {
+			MUST_ftp::upload($val['conn'], self::readAttachments());
+		}
+	}
+
+	public function adminMenu() {
+		$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
+		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
+		$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
+		$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageB', array($this, 'pageB'));
+		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
+	}
+	public function pageA() {
+		if (isset($_POST['do'])&&$_POST['do']=='upload') {
+			$this->upload();
+		}
+		$opt = $this->getOpt();
+		?>
+		<div style="margin: 4px 15px 0 0;">
+		<h2>WP-MultiTarget-Uploads-Sync-Tool</h2>
+		<table class="widefat">
+			<?php
+			$data = self::readAttachments();
+			
+			echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Mime</th><th>Guid</th><th>Control</th></thead>';
+			foreach ($data as $val) {
+				echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
+				<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td>'.$val->post_mime_type.'</td>
+				<td><a target="_blank" href="'.$val->guid.'">'.$val->guid.'</a></td><td>';
+				$ps = $this->readPS($val->ID);
+				$count = 0;
+				foreach ($ps as $key_ => $val_) {
+					if ($count++ != 0) echo ', ';
+					echo '<span style="'.(!$val_ ? 'color:red;' : 'color:green;').'">'.$opt[$key_]['name'].'</span>';
+				}
+				echo '</td></tr>';
+			}
+			?>
+		</table>
+		<br />
+		<div>
+			<form action="" method="POST">
+				<input type="hidden" name="do" value="upload" />
+				<input type="submit" value="Upload" />
+			</form>
+		</div>
+		<br /><br />
+		Notice: <span style="color:#888;">Red means not uploaded, Green means uploaded.</span>
+		</div>
+		<?php
+	}
+	public function pageB() {
+		$opt = $this->getOpt();
+		$MT = $this->getMT();
+		if (isset($_POST['do'])) {
+			//print_r($_POST);
+			if ($_POST['do'] == 'add') {
+				$opt[] = self::singleOpt(array('type' => $_POST['add_type']));
+				self::putOpt($opt);
+			}
+			elseif ($_POST['do'] == 'modify') {
+				$count = 0;
+				while (isset($_POST[$count.'_name'])) {
+					$singleSet = MUST_ftp::setWithID($count, $_POST);
+					$opt_[$count] = self::singleOpt(array(
+						'name' => $_POST[$count.'_name'],
+						'type' => $_POST[$count.'_type'],
+						'conn' => $singleSet,
+						'enable' => (isset($_POST[$count.'_enable']) ? 1 : 0),
+					));
+					$count++;
+				}
+				$opt = $opt_;
+				self::putOpt($opt);
+			}
+			elseif ($_POST['do'] == 'mtarget') {
+				self::putMT($_POST['mtarget']);
+				$MT = $_POST['mtarget'];
+			}
 		}
 		?>
-	</table>
-	</div>
-	<?php
-}
-public function pageB() {
-	if (isset($_POST['add_type'])) {
-		$opt = $this->getOpt();
-		$opt[] = self::singleOpt();
-		print_r($opt);
-	}
-	$count = 1;
-	?>
-	<div style="margin: 4px 15px 0 0;">
-	<h2>WP-MultiTarget-Uploads-Sync-Tool Setting</h2>
-	<div>
-		<form>
-			<table class="widefat">
-				<thead><th>ID</th><th>Name</th><th>Type</th><th>Connection</th></thead>
-				
-					<tr id="target-<?php $count; ?>">
-						<td><?php echo $count; ?></td><td><input type="text" name="name-<?php echo $count; ?>" /></td>
-						<td>Ftp</td>
-						<td><table class="widefat">
-							<thead>
-							<?php foreach (MUST_ftp::$set as $key => $val): ?>
-								<th><?php echo $key; ?></th>
-							<?php endforeach; ?>
-							</thead>
-							<tr>
-							<?php foreach (MUST_ftp::$set as $key => $val): ?>
-								<td><input type="text" name="<?php echo $key; ?>-<?php echo $count; ?>" /></td>
-							<?php endforeach; ?>
+		<style type="text/css">
+		.widefat tr td .widefat {
+			border-color: #EEE;
+		}
+		.widefat tr td .widefat thead tr th {
+			background-image: none;
+			background: #fafafa;
+		}
+		.widefat tr td .widefat td, .widefat tr td .widefat th {
+			border-bottom-color: #eee;
+		}
+		input[disabled="disabled"] {
+			background: #eee;
+		}
+		</style>
+		<div style="margin: 4px 15px 0 0;">
+		<h2>WP-MultiTarget-Uploads-Sync-Tool Setting</h2>
+		<div>
+			<?php if (!empty($opt)): ?>
+				<form action="" method="POST">
+					<table class="widefat">
+						<thead><th>Enable</th></th><th>ID</th><th>Name</th><th>Type</th><th>Connection</th></thead>
+						<?php foreach ($opt as $key_ => $val_): ?>
+							<tr id="target-<?php echo $key_; ?>">
+								<td><input type="checkbox" name="<?php echo $key_; ?>_enable"<?php echo $val_['enable'] ? ' checked' : '';?> /></td>
+								<td><?php echo $key_; ?></td>
+								<td><input type="text" name="<?php echo $key_; ?>_name" value="<?php echo $val_['name']; ?>" /></td>
+								<td><?php echo strtoupper($val_['type']); ?></td>
+								<td><table class="widefat">
+									<thead>
+									<?php foreach (MUST_ftp::$set as $key => $val): ?>
+										<th><?php echo strtoupper($key); ?></th>
+									<?php endforeach; ?>
+									</thead>
+									<tr>
+									<?php foreach (MUST_ftp::set($val_['conn']) as $key => $val): ?>
+										<td><input type="text" name="<?php echo $key_; ?>_<?php echo $key; ?>" value="<?php echo $val; ?>" /></td>
+									<?php endforeach; ?>
+									</tr>
+									</table>
+									<input type="hidden" name="<?php echo $key_; ?>_type" value="<?php echo $val_['type']; ?>" />
+								</td>
 							</tr>
-						</table></td>
-					</tr>
-				
-			</table>
-		</form>
-	</div>
-	<br /><br />
-	<div>
-		<form action="" method="POST">
-			Add New Target:
-			<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
-				<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
-			<?php endforeach; ?></select>
-			<input type="submit" />
-		</form>
-	</div>
-	</div>
-	<?php
-}
+						<?php endforeach; ?>
+					</table>
+					<input type="hidden" name="do" value="modify" />
+					<br />
+					<input type="submit" value="Save" />
+				</form>
+			<?php endif; ?>
+		</div>
+		<br /><br />
+		<div>
+			<form action="" method="POST">
+				<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
+					<option value="<?php echo $key; ?>"><?php echo strtoupper($key); ?></option>
+				<?php endforeach; ?></select>
+				<input type="hidden" name="do" value="add" />
+				<input type="submit" value="Add" />
+			</form>
+		</div>
+		<br />
+		<div>
+			<?php if (!empty($opt)): ?>
+				<form action="" method="POST">
+					<select name="mtarget"><?php foreach ($opt as $key_ => $val_): ?>
+						<option value="<?php echo $key_; ?>"<?php echo $MT == $key_ ? ' selected' : ''; ?>><?php echo $val_['name']; ?></option>
+					<?php endforeach; ?></select>
+					<input type="hidden" name="do" value="mtarget" />
+					<input type="submit" value="Choose" />
+				</form>
+			<?php endif; ?>
+		</div>
+		</div>
+		<?php
+	}
 
 }
 
 class MUST_ftp {
 
-public static $set = array(
-	'Host' => '',
-	'Username' => '',
-	'Password' => '',
-	'Folder' => ''
-);
+	private static $name = 'ftp';
+	public static $set = array(
+		'host' => '',
+		'username' => '',
+		'password' => '',
+		'folder' => '',
+		'folder_url' => '',
+		'port' => 21,
+	);
 
-public static function set($data = array()) {
-	return MUST::arrayRewrite(self::$set, $data);
-}
+	public static function set($data = array()) {
+		return MUST::arrayRewrite(self::$set, $data);
+	}
+
+	public static function setWithID($id, $data = array()) {
+		$tmp = array();
+		foreach ($data as $key => $val) {
+			$tmp[str_replace($id.'_', '', $key)] = $val;
+		}
+		return MUST::arrayRewrite(self::$set, $tmp);
+	}
+	
+	/*
+	 * $conn refer to $set.
+	 * $attach refer to array($pid, $localUrl).
+	 * $successMethod refer to MUST->writePS($pid, $data = array()).
+	 */
+	public static function upload($conn, $attach, $successMethod) {
+		foreach ($attach as $val) {
+			
+		}
+	}
 
 }
