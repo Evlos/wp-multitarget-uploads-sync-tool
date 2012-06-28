@@ -118,22 +118,52 @@ class MUST {
 			WHERE post_status = 'inherit' AND post_type = 'attachment'
 		"));
 	}
+	/*
+	 * $res refer to
+	 * 
+	 * Array
+		(
+			[0] => wp-content/uploads/2012/06/goodwp.com-15509.jpg
+			[1] => 2012
+			[2] => 06
+			[3] => goodwp.com-15509.jpg
+		)
+	 * 
+	 */
+	public static function splitUrl($guid) {
+		$regex = '/wp-content\/uploads\/([0-9\/]+)\/(.+)$/i';
+		preg_match($regex, $guid, $res);
+		return $res;
+	}
 	
-	public function upload() {
+	public function upload($chkRemote = false) {
 		$opt = $this->getOpt();
 		foreach ($opt as $key => $val) {
-			MUST_ftp::upload($val['conn'], self::readAttachments());
+			$conn = $val['conn'];
+			$attach = self::readAttachments();
+			foreach ($attach as $val) {
+				$isReady = false;
+				//Check ifUploaded
+				$ps = self::readPS($val->ID);
+				if (!$ps[$key]) $isReady = true;
+				//Check remote ifUploaded
+				if ($chkRemote) {
+					
+				}
+				//Upload
+				if ($isReady) MUST_ftp::upload(self::splitUrl($val->guid));
+			}
 		}
 	}
 
 	public function adminMenu() {
-		$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
+		$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageList'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
-		$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageA'));
-		$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageB', array($this, 'pageB'));
+		$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageList'));
+		$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageSetting', array($this, 'pageSetting'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 	}
-	public function pageA() {
+	public function pageList() {
 		if (isset($_POST['do'])&&$_POST['do']=='upload') {
 			$this->upload();
 		}
@@ -145,7 +175,7 @@ class MUST {
 			<?php
 			$data = self::readAttachments();
 			
-			echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Mime</th><th>Guid</th><th>Control</th></thead>';
+			echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Mime</th><th>Guid</th><th>Status</th></thead>';
 			foreach ($data as $val) {
 				echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
 				<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td>'.$val->post_mime_type.'</td>
@@ -172,7 +202,7 @@ class MUST {
 		</div>
 		<?php
 	}
-	public function pageB() {
+	public function pageSetting() {
 		$opt = $this->getOpt();
 		$MT = $this->getMT();
 		if (isset($_POST['do'])) {
@@ -184,7 +214,11 @@ class MUST {
 			elseif ($_POST['do'] == 'modify') {
 				$count = 0;
 				while (isset($_POST[$count.'_name'])) {
-					$singleSet = MUST_ftp::setWithID($count, $_POST);
+					$tmp = array();
+					foreach ($_POST as $key => $val) {
+						$tmp[str_replace($count.'_', '', $key)] = $val;
+					}
+					$singleSet = MUST_ftp::set($tmp);
 					$opt_[$count] = self::singleOpt(array(
 						'name' => $_POST[$count.'_name'],
 						'type' => $_POST[$count.'_type'],
@@ -216,6 +250,9 @@ class MUST {
 		input[disabled="disabled"] {
 			background: #eee;
 		}
+		.widefat .child input {
+			width: 100px;
+		}
 		</style>
 		<div style="margin: 4px 15px 0 0;">
 		<h2>WP-MultiTarget-Uploads-Sync-Tool Setting</h2>
@@ -230,7 +267,7 @@ class MUST {
 								<td><?php echo $key_; ?></td>
 								<td><input type="text" name="<?php echo $key_; ?>_name" value="<?php echo $val_['name']; ?>" /></td>
 								<td><?php echo strtoupper($val_['type']); ?></td>
-								<td><table class="widefat">
+								<td><table class="widefat child">
 									<thead>
 									<?php foreach (MUST_ftp::$set as $key => $val): ?>
 										<th><?php echo strtoupper($key); ?></th>
@@ -271,7 +308,7 @@ class MUST {
 						<option value="<?php echo $key_; ?>"<?php echo $MT == $key_ ? ' selected' : ''; ?>><?php echo $val_['name']; ?></option>
 					<?php endforeach; ?></select>
 					<input type="hidden" name="do" value="mtarget" />
-					<input type="submit" value="Choose" />
+					<input type="submit" value="MainTarget" />
 				</form>
 			<?php endif; ?>
 		</div>
@@ -296,24 +333,5 @@ class MUST_ftp {
 	public static function set($data = array()) {
 		return MUST::arrayRewrite(self::$set, $data);
 	}
-
-	public static function setWithID($id, $data = array()) {
-		$tmp = array();
-		foreach ($data as $key => $val) {
-			$tmp[str_replace($id.'_', '', $key)] = $val;
-		}
-		return MUST::arrayRewrite(self::$set, $tmp);
-	}
 	
-	/*
-	 * $conn refer to $set.
-	 * $attach refer to array($pid, $localUrl).
-	 * MUST::success($pid, $tid).
-	 */
-	public static function upload($conn, $attach) {
-		foreach ($attach as $val) {
-			//To be continued.
-		}
-	}
-
 }
