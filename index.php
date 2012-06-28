@@ -95,6 +95,9 @@ class MUST {
 			return json_decode($ps);
 		}
 	}
+	public static function success($pid, $tid) {
+		
+	}
 	
 	public function createOpt() {
 		if (!$this->opt = get_option(self::$name.'_option')) {
@@ -305,11 +308,11 @@ class MUST_ftp {
 	/*
 	 * $conn refer to $set.
 	 * $attach refer to array($pid, $localUrl).
-	 * $successMethod refer to MUST->writePS($pid, $data = array()).
+	 * MUST::success($pid, $tid).
 	 */
-	public static function upload($conn, $attach, $successMethod) {
+	public static function upload($conn, $attach) {
 		foreach ($attach as $val) {
-			
+			//To be continued.
 		}
 	}
 
