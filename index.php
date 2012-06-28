@@ -12,16 +12,11 @@ MUST::ins();
 
 class MUST {
 
-private static $tar = array(
-	'Ftp' => array(
-		'Info' => array(
-			'Host', 'Username', 'Password', 'Folder'
-		),
-	),
-);
-
 private static $name = 'MUST';
 private static $ins;
+private static $addons = array(
+	'ftp' => 'MUST_ftp',
+);
 private $opt;
 
 private function __construct() {
@@ -32,6 +27,35 @@ public static function ins() {
 	if (is_null(self::$ins))
 		self::$ins = new self();
 	return self::$ins;
+}
+
+public static function arrayRewrite($default, $changed) {
+	foreach ($default as $key => $val) {
+		if (isset($changed[$key])) $default[$key] = $changed[$key];
+	}
+	return $default;
+}
+public static function zip($data) {
+	return json_encode($data);
+}
+public static function unzip($data) {
+	return json_decode($data, true);
+}
+public static function singleOpt($data = array()) {
+	$opt = array(
+		'name' => '',
+		'type' => '',
+		'conn' => '',
+	);
+	return self::arrayRewrite($opt, $changed);
+}
+
+public function getOpt() {
+	$opt = get_option(self::$name.'_option');
+	return empty($opt) ? array() : $opt;
+}
+public function putOpt($data) {
+	return update_option(self::$name.'_option', $data);
 }
 
 public function updateOpt() {
@@ -81,6 +105,11 @@ public function pageA() {
 	<?php
 }
 public function pageB() {
+	if (isset($_POST['add_type'])) {
+		$opt = $this->getOpt();
+		$opt[] = self::singleOpt();
+		print_r($opt);
+	}
 	$count = 1;
 	?>
 	<div style="margin: 4px 15px 0 0;">
@@ -89,28 +118,32 @@ public function pageB() {
 		<form>
 			<table class="widefat">
 				<thead><th>ID</th><th>Name</th><th>Type</th><th>Connection</th></thead>
-				<tr id="target-<?php $count; ?>">
-					<td><?php echo $count; ?></td><td><input type="text" name="name-<?php echo $count; ?>" /></td>
-					<td>Ftp</td>
-					<td><table class="widefat">
-						<thead>
-						<?php foreach (self::$tar['Ftp']['Info'] as $val): ?>
-							<th><?php echo $val; ?></th>
-						<?php endforeach; ?>
-						</thead>
-						<tr>
-						<?php foreach (self::$tar['Ftp']['Info'] as $val): ?>
-							<td><input type="text" name="<?php echo $val; ?>-<?php echo $count; ?>" /></td>
-						<?php endforeach; ?>
-						</tr>
-					</table></td>
-				</tr>
+				
+					<tr id="target-<?php $count; ?>">
+						<td><?php echo $count; ?></td><td><input type="text" name="name-<?php echo $count; ?>" /></td>
+						<td>Ftp</td>
+						<td><table class="widefat">
+							<thead>
+							<?php foreach (MUST_ftp::$set as $key => $val): ?>
+								<th><?php echo $key; ?></th>
+							<?php endforeach; ?>
+							</thead>
+							<tr>
+							<?php foreach (MUST_ftp::$set as $key => $val): ?>
+								<td><input type="text" name="<?php echo $key; ?>-<?php echo $count; ?>" /></td>
+							<?php endforeach; ?>
+							</tr>
+						</table></td>
+					</tr>
+				
 			</table>
 		</form>
 	</div>
+	<br /><br />
 	<div>
-		<form>
-			<select name="type"><?php foreach (self::$tar as $key => $val) : ?>
+		<form action="" method="POST">
+			Add New Target:
+			<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
 				<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
 			<?php endforeach; ?></select>
 			<input type="submit" />
@@ -118,6 +151,21 @@ public function pageB() {
 	</div>
 	</div>
 	<?php
+}
+
+}
+
+class MUST_ftp {
+
+public static $set = array(
+	'Host' => '',
+	'Username' => '',
+	'Password' => '',
+	'Folder' => ''
+);
+
+public static function set($data = array()) {
+	return MUST::arrayRewrite(self::$set, $data);
 }
 
 }
