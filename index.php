@@ -50,68 +50,44 @@ class MUST {
 		return self::arrayRewrite($opt, $changed);
 	}
 
-	public function getOpt() {
+	function getOpt() {
 		$opt = get_option(self::$name.'_option', '');
 		return empty($opt) ? array() : json_decode($opt, true);
 	}
-	public function refreshOpt() {
+	function refreshOpt() {
 		//Notice
 	}
-	public function putOpt($changed) {
+	function putOpt($changed) {
 		$res = update_option(self::$name.'_option', json_encode($changed));
 		$this->refreshOpt();
 		return $res;
 	}
-	public function getMT() {
+	function getMT() {
 		return get_option(self::$name.'_mtarget');
 	}
-	public function putMT($data) {
+	function putMT($data) {
 		return update_option(self::$name.'_mtarget', $data);
 	}
-	public function getPM($pid, $key) {
-		return get_post_meta($pid, $key, true);
+	function getPM($pid, $key) {
+		return get_post_meta($pid, self::$name.'_'.$key, true);
 	}
-	public function putPM($pid, $key, $data) {
-		update_post_meta($pid, $key, $data);
+	function putPM($pid, $key, $data) {
+		update_post_meta($pid, self::$name.'_'.$key, $data);
 	}
-	
-	public function singlePS($changed = array()) {
-		$opt = $this->getOpt();
-		foreach ($opt as $key_ => $val_) {
-			$ps[$key_] = 0;
-		}
-		return self::arrayRewrite($ps, $changed);
-	}
-	public function writePS($pid, $data = array()) {
-		return $this->putPM($pid, self::$name.'_poststatus', json_encode($this->singlePS($data)));
-	}
-	public function readPS($pid) {
-		$ps = $this->getPM($pid, self::$name.'_poststatus');
-		if (empty($ps)) {
-			$this->writePS($pid);
-			return $this->singlePS();
-		}
-		else {
-			return json_decode($ps);
-		}
-	}
-	public static function success($pid, $tid) {
 		
-	}
-	
-	public function createOpt() {
+	function createOpt() {
 		if (!$this->opt = get_option(self::$name.'_option')) {
 			update_option(self::$name.'_option', '');
 		}
 	}
-	public function wpInit() {
+	function wpInit() {
 		add_action('admin_menu', array($this, 'adminMenu'));
 	}
-	public function addStyle() {
+	function addStyle() {
 		wp_enqueue_style('/wp-admin/css/colors-classic.css');
 	}
 	
-	public static function readAttachments() {
+	static function readAttachments() {
 		global $wpdb;
 		return array_reverse($wpdb->get_results("
 			SELECT * FROM {$wpdb->posts}
@@ -127,43 +103,67 @@ class MUST {
 			[1] => 2012
 			[2] => 06
 			[3] => goodwp.com-15509.jpg
+			[4] => C:\path\to\wordpress\wp-content\uploads
 		)
 	 * 
 	 */
-	public static function splitUrl($guid) {
-		$regex = '/wp-content\/uploads\/([0-9\/]+)\/(.+)$/i';
+	static function splitUrl($guid) {
+		$regex = '/wp-content\/uploads\/([0-9]+)\/([0-9]+)\/(.+)$/i';
 		preg_match($regex, $guid, $res);
+		$dir = wp_upload_dir();
+		$res[] = $dir['basedir'];
 		return $res;
 	}
+	public static function linko($pid) {
+		global $wpdb;
+		return $wpdb->get_var("
+			SELECT guid FROM {$wpdb->posts}
+			WHERE post_status = 'inherit' AND post_type = 'attachment' AND ID = {$pid}
+		");
+	}
+	function link($pid) {
+		$MT = $this->getMT();
+		$url = getPM($pid, 'link_'.$MT);
+		if (!empty($url)) return $url;
+		else {
+			return self::linko($pid);
+		}
+	}
 	
-	public function upload($chkRemote = false) {
+	function upload($chkRemote = false) {
 		$opt = $this->getOpt();
 		foreach ($opt as $key => $val) {
-			$conn = $val['conn'];
-			$attach = self::readAttachments();
-			foreach ($attach as $val) {
-				$isReady = false;
-				//Check ifUploaded
-				$ps = self::readPS($val->ID);
-				if (!$ps[$key]) $isReady = true;
-				//Check remote ifUploaded
-				if ($chkRemote) {
-					
+			if ($val['enable']) {
+				$conn = $val['conn'];
+				$attach = self::readAttachments();
+				foreach ($attach as $val) {
+					$isReady = false;
+					//Check ifUploaded
+					$nurl = $this->getPM($val->ID, 'link_'.$key);
+					//if (empty($nurl))
+						$isReady = true;
+					//Check remote ifUploaded
+					if ($chkRemote) {
+						
+					}
+					//Upload
+					if ($isReady) {
+						$nurl = MUST_ftp::upload(self::splitUrl($val->guid), $conn);
+						if ($nurl) $this->putPM($val->ID, 'link_'.$key, $nurl);
+					}
 				}
-				//Upload
-				if ($isReady) MUST_ftp::upload(self::splitUrl($val->guid));
 			}
 		}
 	}
 
-	public function adminMenu() {
+	function adminMenu() {
 		$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageList'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 		$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageList'));
 		$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageSetting', array($this, 'pageSetting'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 	}
-	public function pageList() {
+	function pageList() {
 		if (isset($_POST['do'])&&$_POST['do']=='upload') {
 			$this->upload();
 		}
@@ -171,38 +171,44 @@ class MUST {
 		?>
 		<div style="margin: 4px 15px 0 0;">
 		<h2>WP-MultiTarget-Uploads-Sync-Tool</h2>
+		<div>
+			<form action="" method="POST" style="display:inline;">
+				<input type="hidden" name="do" value="upload" />
+				<input type="submit" value="Upload All" />
+			</form>
+			<form action="" method="POST" style="display:inline;">
+				<input type="hidden" name="do" value="update" />
+				<input type="submit" value="Update Posts" />
+			</form>
+		</div>
+		<br />
 		<table class="widefat">
 			<?php
 			$data = self::readAttachments();
 			
-			echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Mime</th><th>Guid</th><th>Status</th></thead>';
+			echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Mime</th><th>Guid</th>';
+			foreach ($opt as $key_ => $val_) echo '<th>'.$val_['name'].'</th>';
+			echo '</thead>';
 			foreach ($data as $val) {
+				$res = self::splitUrl($val->guid);
 				echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
 				<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td>'.$val->post_mime_type.'</td>
-				<td><a target="_blank" href="'.$val->guid.'">'.$val->guid.'</a></td><td>';
-				$ps = $this->readPS($val->ID);
-				$count = 0;
-				foreach ($ps as $key_ => $val_) {
-					if ($count++ != 0) echo ', ';
-					echo '<span style="'.(!$val_ ? 'color:red;' : 'color:green;').'">'.$opt[$key_]['name'].'</span>';
+				<td><a target="_blank" href="'.$val->guid.'">'.$res[3].'</a></td>';
+				foreach ($opt as $key_ => $val_) {
+					echo '<td>';
+					$url = $this->getPM($val->ID, 'link_'.$key_);
+					if (!$url) echo '<span style="color:grey;">None</span>';
+					else echo '<a target="_blank" href="'.$url.'" style="color:green;">open</a>';
+					echo '</td>';
 				}
-				echo '</td></tr>';
+				echo '</tr>';
 			}
 			?>
 		</table>
-		<br />
-		<div>
-			<form action="" method="POST">
-				<input type="hidden" name="do" value="upload" />
-				<input type="submit" value="Upload" />
-			</form>
-		</div>
-		<br /><br />
-		Notice: <span style="color:#888;">Red means not uploaded, Green means uploaded.</span>
 		</div>
 		<?php
 	}
-	public function pageSetting() {
+	function pageSetting() {
 		$opt = $this->getOpt();
 		$MT = $this->getMT();
 		if (isset($_POST['do'])) {
@@ -251,11 +257,30 @@ class MUST {
 			background: #eee;
 		}
 		.widefat .child input {
-			width: 100px;
+			width: 120px;
 		}
 		</style>
 		<div style="margin: 4px 15px 0 0;">
 		<h2>WP-MultiTarget-Uploads-Sync-Tool Setting</h2>
+		<div>
+			<form action="" method="POST" style="display:inline;">
+				<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
+					<option value="<?php echo $key; ?>"><?php echo strtoupper($key); ?></option>
+				<?php endforeach; ?></select>
+				<input type="hidden" name="do" value="add" />
+				<input type="submit" value="Add" />
+			</form>
+			<?php if (!empty($opt)): ?>
+				<form action="" method="POST" style="display:inline;">
+					<select name="mtarget"><?php foreach ($opt as $key_ => $val_): ?>
+						<option value="<?php echo $key_; ?>"<?php echo $MT == $key_ ? ' selected' : ''; ?>><?php echo $val_['name']; ?></option>
+					<?php endforeach; ?></select>
+					<input type="hidden" name="do" value="mtarget" />
+					<input type="submit" value="Main Target" />
+				</form>
+			<?php endif; ?>
+		</div>
+		<br />
 		<div>
 			<?php if (!empty($opt)): ?>
 				<form action="" method="POST">
@@ -290,28 +315,6 @@ class MUST {
 				</form>
 			<?php endif; ?>
 		</div>
-		<br /><br />
-		<div>
-			<form action="" method="POST">
-				<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
-					<option value="<?php echo $key; ?>"><?php echo strtoupper($key); ?></option>
-				<?php endforeach; ?></select>
-				<input type="hidden" name="do" value="add" />
-				<input type="submit" value="Add" />
-			</form>
-		</div>
-		<br />
-		<div>
-			<?php if (!empty($opt)): ?>
-				<form action="" method="POST">
-					<select name="mtarget"><?php foreach ($opt as $key_ => $val_): ?>
-						<option value="<?php echo $key_; ?>"<?php echo $MT == $key_ ? ' selected' : ''; ?>><?php echo $val_['name']; ?></option>
-					<?php endforeach; ?></select>
-					<input type="hidden" name="do" value="mtarget" />
-					<input type="submit" value="MainTarget" />
-				</form>
-			<?php endif; ?>
-		</div>
 		</div>
 		<?php
 	}
@@ -332,6 +335,29 @@ class MUST_ftp {
 
 	public static function set($data = array()) {
 		return MUST::arrayRewrite(self::$set, $data);
+	}
+	
+	public static function upload($res, $conn) {
+
+		$send_file = $res[4].'/'.$res[1].'/'.$res[2].'/'.$res[3];
+		$remote_file = $res[3];
+
+		$ftp_server = $conn['host'];
+		$ftp_user_name = $conn['username'];
+		$ftp_user_pass = $conn['password'];
+		$ftp_dst_dir = $conn['folder'];
+		
+		$dir_level = array($res[1], $res[2]);
+
+		require_once plugin_dir_path(__FILE__).'/lib/ftp_do.php';
+
+		$final = MUST_ftp_do::ins($ftp_server, $ftp_user_name, $ftp_user_pass, $ftp_dst_dir, $dir_level)
+		->send($remote_file, $send_file, FTP_BINARY, $dir_level);
+		
+		$nurl = $conn['folder_url'].$res[1].'/'.$res[2].'/'.$res[3];
+		
+		if ($final) return $nurl; else return false;
+
 	}
 	
 }
