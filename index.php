@@ -82,8 +82,10 @@ class MUST {
 	}
 	function wpInit() {
 		add_action('admin_menu', array($this, 'adminMenu'));
-		add_action('wp_enqueue_scripts', array($this, 'addScripts'));
-		add_action('wp_head', array($this, 'addText2Header'));
+		//add_action('wp_enqueue_scripts', array($this, 'addScripts'));
+		//add_action('wp_head', array($this, 'addText2Header'));
+
+		add_filter('the_content', array($this, 'addAfterTheContent'));
 	}
 	function addScripts() {
 		wp_enqueue_script('jquery');
@@ -91,18 +93,25 @@ class MUST {
 	function addStyle() {
 		wp_enqueue_style('/wp-admin/css/colors-classic.css');
 	}
+	function addAfterTheContent($content) {
+		return str_replace($this->urlDefault(), $this->urlCurrent(), $content);
+	}
 	function addText2Header() {
+		//FIX later
 		echo '
-		<style type="text/css">
-		.entry-content img {
-			display: none;
-		}
-		</style>
 		<script type="text/javascript">
-		jQuery(document).ready(function(){
-			jQuery(".entry-content img").each(function(){
-				jQuery(this).attr("src", jQuery(this).attr("src").replace("'.$this->urlDefault().'", "'.$this->urlCurrent().'"));
-				jQuery(this).css("display", "block");
+		jQuery(function($){
+			$.one(function(){
+					$(".entry-content img").bind("load", function(){
+						$(this).hide().attr("src", "");
+						self.loaded = true;
+					});
+			});
+		});
+		jQuery(document).ready(function($){
+			$(".entry-content img").each(function(){
+				//$(this).attr("src", $(this).attr("src").replace("'.$this->urlDefault().'", "'.$this->urlCurrent().'"));
+				//$(this).css("display", "block");
 			});
 		});
 		</script>';
