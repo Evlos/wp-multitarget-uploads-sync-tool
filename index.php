@@ -82,9 +82,30 @@ class MUST {
 	}
 	function wpInit() {
 		add_action('admin_menu', array($this, 'adminMenu'));
+		add_action('wp_enqueue_scripts', array($this, 'addScripts'));
+		add_action('wp_head', array($this, 'addText2Header'));
+	}
+	function addScripts() {
+		wp_enqueue_script('jquery');
 	}
 	function addStyle() {
 		wp_enqueue_style('/wp-admin/css/colors-classic.css');
+	}
+	function addText2Header() {
+		echo '
+		<style type="text/css">
+		.entry-content img {
+			display: none;
+		}
+		</style>
+		<script type="text/javascript">
+		jQuery(document).ready(function(){
+			jQuery(".entry-content img").each(function(){
+				jQuery(this).attr("src", jQuery(this).attr("src").replace("'.$this->urlDefault().'", "'.$this->urlCurrent().'"));
+				jQuery(this).css("display", "block");
+			});
+		});
+		</script>';
 	}
 	
 	static function readAttachments() {
@@ -129,6 +150,16 @@ class MUST {
 			return self::linko($pid);
 		}
 	}
+
+	function urlDefault() {
+		return site_url().'/wp-content/uploads/';
+	}
+	function urlCurrent() {
+		$MT = $this->getMT();
+		$opt = $this->getOpt();
+		return $opt[$MT]['conn']['folder_url'];
+		//print_r($opt[$MT]);
+	}
 	
 	function upload($chkRemote = false) {
 		$opt = $this->getOpt();
@@ -140,7 +171,7 @@ class MUST {
 					$isReady = false;
 					//Check ifUploaded
 					$nurl = $this->getPM($val->ID, 'link_'.$key);
-					//if (empty($nurl))
+					if (empty($nurl)) //IMP
 						$isReady = true;
 					//Check remote ifUploaded
 					if ($chkRemote) {
@@ -155,6 +186,10 @@ class MUST {
 			}
 		}
 	}
+	
+	function update() {
+		//JS method?
+	}
 
 	function adminMenu() {
 		$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageList'));
@@ -167,6 +202,9 @@ class MUST {
 		if (isset($_POST['do'])&&$_POST['do']=='upload') {
 			$this->upload();
 		}
+		if (isset($_POST['do'])&&$_POST['do']=='update') {
+			$this->update();
+		}
 		$opt = $this->getOpt();
 		?>
 		<div style="margin: 4px 15px 0 0;">
@@ -176,10 +214,10 @@ class MUST {
 				<input type="hidden" name="do" value="upload" />
 				<input type="submit" value="Upload All" />
 			</form>
-			<form action="" method="POST" style="display:inline;">
+			<!--<form action="" method="POST" style="display:inline;">
 				<input type="hidden" name="do" value="update" />
 				<input type="submit" value="Update Posts" />
-			</form>
+			</form>-->
 		</div>
 		<br />
 		<table class="widefat">
@@ -198,7 +236,8 @@ class MUST {
 					echo '<td>';
 					$url = $this->getPM($val->ID, 'link_'.$key_);
 					if (!$url) echo '<span style="color:grey;">None</span>';
-					else echo '<a target="_blank" href="'.$url.'" style="color:green;">OPEN</a> - <a target="_blank" href="#" style="color:green;">UPLOAD</a>';
+					else echo '<a target="_blank" href="'.$url.'" style="color:green;">OPEN</a>';
+					// - <a target="_blank" href="#" style="color:green;">UPLOAD</a>
 					echo '</td>';
 				}
 				echo '</tr>';
@@ -259,11 +298,19 @@ class MUST {
 		.widefat .child input {
 			width: 120px;
 		}
+		input[type="submit"] {
+			padding: 3px 12px;
+			text-transform: uppercase;
+		}
+		.inputlong {
+			width: 600px;
+		}
 		</style>
 		<div style="margin: 4px 15px 0 0;">
 		<h2>WP-MultiTarget-Uploads-Sync-Tool Setting</h2>
 		<div>
 			<form action="" method="POST" style="display:inline;">
+				New Target:
 				<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
 					<option value="<?php echo $key; ?>"><?php echo strtoupper($key); ?></option>
 				<?php endforeach; ?></select>
@@ -272,12 +319,15 @@ class MUST {
 			</form>
 			<?php if (!empty($opt)): ?>
 				<form action="" method="POST" style="display:inline;">
+					 - Current Target:
 					<select name="mtarget"><?php foreach ($opt as $key_ => $val_): ?>
 						<option value="<?php echo $key_; ?>"<?php echo $MT == $key_ ? ' selected' : ''; ?>><?php echo $val_['name']; ?></option>
 					<?php endforeach; ?></select>
 					<input type="hidden" name="do" value="mtarget" />
-					<input type="submit" value="Main Target" />
+					<input type="submit" value="Set" />
 				</form>
+			 - Default URL: <?php echo $this->urlDefault(); ?>
+			 - Current URL: <?php echo $this->urlCurrent(); ?>
 			<?php endif; ?>
 		</div>
 		<br />
