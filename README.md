@@ -1,6 +1,3 @@
-Notice: This project is still building, it doesn't work currently.
-------
-
 WP-MultiTarget-Uploads-Sync-Tool
 ============================================
 
