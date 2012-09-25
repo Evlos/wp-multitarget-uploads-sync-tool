@@ -4,7 +4,7 @@ Plugin Name: WP-MultiTarget-Uploads-Sync-Tool
 Plugin URI: http://www.rainmoe.com/
 Description: A WordPress plugin which able to sync attachments to multiple targets, such as FTP, Dropbox and etc.
 Author: 小邪.Evlos
-Version: 1.0.0
+Version: 1.0.1
 Author URI: http://www.rainmoe.com/
 */
 
@@ -13,7 +13,7 @@ MUST::ins();
 class MUST {
 
 	private static $name = 'MUST';
-	private static $version = '1.0.0';
+	private static $version = '1.0.1';
 	private static $ins;
 	private static $addons = array(
 		'ftp' => 'MUST_ftp',
