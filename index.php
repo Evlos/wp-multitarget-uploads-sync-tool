@@ -3,7 +3,7 @@
 Plugin Name: WP-MultiTarget-Uploads-Sync-Tool
 Plugin URI: http://rainmoe.com/
 Description: A WordPress plugin which able to sync attachments to multiple FTP targets.
-Author: Evlos
+Author: evlos
 Version: 1.0.3
 Author URI: http://rainmoe.com/
 */
@@ -106,10 +106,9 @@ class MUST {
 		//add_action('wp_enqueue_scripts', array($this, 'addScripts'));
 		//add_action('wp_head', array($this, 'addText2Header'));
 
-		if (self::getMT()!=''&&self::urlCurrent()!='')
-			add_filter('the_content', array($this, 'addAfterTheContent'));
-
+		if (!self::isNoLocal()) add_filter('the_content', array($this, 'addAfterTheContent'));
 		add_action('save_post', array($this, 'addWhenSavingPost'));
+		//add_filter('content_save_pre', array($this, 'addOnEditorSaving')); // uploadA() will replace this
 
 		if (self::isNoLocal()) self::putMT(0);
 	}
@@ -118,10 +117,6 @@ class MUST {
 	}
 	function addStyle() {
 		wp_enqueue_style('/wp-admin/css/colors-classic.css');
-	}
-	function addWhenSavingPost($aid) {
-		if (self::isNoLocal()) self::uploadA(false, false, $aid);
-		else self::upload();
 	}
 	function addText2Header() {
 		//FIX later
@@ -149,6 +144,13 @@ class MUST {
 		return array_reverse($wpdb->get_results("
 			SELECT * FROM {$wpdb->posts}
 			WHERE post_status = 'inherit' AND post_type = 'attachment'
+		"));
+	}
+	function readChildAttachments($pid) {
+		global $wpdb;
+		return array_reverse($wpdb->get_results("
+			SELECT * FROM {$wpdb->posts}
+			WHERE post_status = 'inherit' AND post_type = 'attachment' AND post_parent = {$pid}
 		"));
 	}
 	function readArticles($aid = -1) {
@@ -218,7 +220,17 @@ class MUST {
 		$opt = self::getOpt();
 		return $opt[$MT]['conn']['folder_url'];
 	}
+	function addWhenSavingPost($aid) {
+		if (self::isNoLocal()) self::uploadA(false, false, $aid);
+		else self::upload();
+	}
 	function addAfterTheContent($content) {
+		if (self::isReplaced())
+			return str_replace(self::urlDefault(), self::urlCurrent(), $content);
+		else
+			return $content;
+	}
+	function addOnEditorSaving($content) {
 		if (self::isReplaced())
 			return str_replace(self::urlDefault(), self::urlCurrent(), $content);
 		else
@@ -574,17 +586,23 @@ class MUST {
 	function setKeywords() {
 		return self::setOpt('keywords', 'yes');
 	}*/
+	function resetAIID($theid) {
+		global $wpdb;
+		return $wpdb->get_var("
+			ALTER TABLE {$wpdb->posts} AUTO_INCREMENT = {$theid}
+		");
+	}
 	function uploadA($echo = true, $check = false, $aid = -1) {
 		set_time_limit(600);
 		$data = self::readArticles($aid);
 		$opt = self::getOpt();
 		$conn = $opt[0]['conn'];
 		foreach ($data as $val) {
-			$tmp = $val->post_content;
-			preg_match_all("/".str_replace('/', '\/', self::urlDefault())."[^\"]+/i", $tmp, $res);
-			foreach ($res[0] as $img) $final[md5($img)] = $img;
+			preg_match_all("/".str_replace('/', '\/', self::urlDefault())."[^\"]+|".str_replace('/', '\/', self::urlCurrent())."[^\"]+/i", $val->post_content, $res);
+			foreach ($res[0] as $img) $final[md5(str_replace(self::urlDefault(), self::urlCurrent(), $img))] = str_replace(self::urlCurrent(), self::urlDefault(), $img);
 			foreach (array_unique($final) as $key => $img) {
 				$isReady = true;
+				$needClear = false;
 				$ourl = self::getPM($val->ID, 'link_'.$key, $nurl);
 
 				// Check remote ifUploaded
@@ -593,23 +611,36 @@ class MUST {
 						if ($ourl != ''&&self::isRemoteFileExists($ourl)) {
 							echo '* '.$img.' remote file existed ...'."\r\n";
 							$isReady = false;
+							$needClear = true;
 						}
 					}
 					else {
 						if ($echo) echo '* cUrl is not installed, file will be uploaded without exists check ...'."\r\n";
 					}
 				}
-				else {
-					if ($ourl != '') {
-						echo '* '.$img.' remote record existed ...'."\r\n";
-						$isReady = false;
-					}
+				if ($ourl != '') {
+					echo '* '.$img.' remote record existed ...'."\r\n";
+					$isReady = false;
 				}
 
 				if ($isReady) {
 					$nurl = MUST_ftp::upload(self::splitUrl($img), $conn);
 					if ($nurl) self::putPM($val->ID, 'link_'.$key, $nurl);
 					if ($echo) echo '* '.$img.' uploaded to '.$nurl.' ...'."\r\n";
+					$needClear = true;
+				}
+
+				if ($needClear) {
+					$post_tmp = array();
+					$post_tmp['ID'] = $val->ID;
+					$post_tmp['post_content'] = str_replace($img, str_replace(self::urlDefault(), self::urlCurrent(), $img), $val->post_content);
+					wp_update_post($post_tmp);
+
+					$posts = self::readChildAttachments($val->ID);
+					foreach ($posts as $post) {
+						if ($post->guid == $img) wp_delete_attachment($post->ID, true);
+					}
+					self::resetAIID($val->ID + 1);
 				}
 			}
 		}
@@ -655,25 +686,28 @@ class MUST {
 				echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Images</th><th>Control</th></thead>';
 				//print_r($data);
 				foreach ($data as $val) {
-					echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
-					<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td><table class="widefat child">
-					<thead><th>CurrentURL</th></thead>';
 					$tmp = $val->post_content;
-					preg_match_all("/".str_replace('/', '\/', self::urlDefault())."[^\"]+/i", $tmp, $res);
+					preg_match_all("/".str_replace('/', '\/', self::urlDefault())."[^\"]+|".str_replace('/', '\/', self::urlCurrent())."[^\"]+/i", $tmp, $res);
 					//print_r($res);
-					$final = array();
-					foreach ($res[0] as $img) $final[md5($img)] = $img;
-					foreach (array_unique($final) as $key => $img) {
-						$nurl = self::getPM($val->ID, 'link_'.$key, $nurl); //<td>'.$img.'</td>
-						echo '<tr><td>'.(empty($nurl) ? '-' : '<a target="_blank" href="'.$nurl.'">'.$nurl.'</a>').'</td></tr>';
+					if (!empty($res[0])) {
+						$final = array();
+						foreach ($res[0] as $img) $final[md5(str_replace(self::urlDefault(), self::urlCurrent(), $img))] = $img;
+						//print_r($final);
+						echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
+						<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td><table class="widefat child">
+						<thead><th>CurrentURL</th></thead>';
+						foreach (array_unique($final) as $key => $img) {
+							$nurl = self::getPM($val->ID, 'link_'.$key); //<td>'.$img.'</td>
+							echo '<tr><td>'.(empty($nurl) ? $img : '<a target="_blank" href="'.$nurl.'">'.$nurl.'</a>').'</td></tr>';
+						}
+						echo '</table></td><td>
+						<form action="" method="POST" style="display:inline;">
+						<input type="hidden" name="do" value="uploadone"/>
+						<input type="hidden" name="aid" value="'.$val->ID.'"/>
+						<input type="submit" value="Upload This" />
+						</form>
+						</td></tr>';
 					}
-					echo '</table></td><td>
-					<form action="" method="POST" style="display:inline;">
-					<input type="hidden" name="do" value="uploadone"/>
-					<input type="hidden" name="aid" value="'.$val->ID.'"/>
-					<input type="submit" value="Upload This" />
-					</form>
-					</td></tr>';
 				}
 				?>
 			</table>
