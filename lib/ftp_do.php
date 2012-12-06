@@ -12,11 +12,15 @@ class MUST_ftp_do {
 	
 	private static $ins;
 
+	private static $errors;
+
 	function error($msg) {
-		//echo $msg;
+		self::$errors = true;
+		echo '* '.$msg." ...\r\n";
 	}
 	
 	public static function ins($host, $username, $password, $folder, $dir_level) {
+		self::$errors = false;
 		if (is_null(self::$ins))
 			self::$ins = new self($host, $username, $password, $folder, $dir_level);
 		return self::$ins;
@@ -38,7 +42,7 @@ class MUST_ftp_do {
 			$this->error('Unable to connect server or unable to setDir.');
 			return false;
 		}
-		else return true;
+		else return !self::$errors;
 	}
 
 	function connect() {

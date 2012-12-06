@@ -1,47 +1,48 @@
 <?php
 /*
 Plugin Name: WP-MultiTarget-Uploads-Sync-Tool
-Plugin URI: http://www.rainmoe.com/
-Description: A WordPress plugin which able to sync attachments to multiple targets, such as FTP, Dropbox and etc.
-Author: 小邪.Evlos
-Version: 1.0.1
-Author URI: http://www.rainmoe.com/
+Plugin URI: http://rainmoe.com/
+Description: A WordPress plugin which able to sync attachments to multiple FTP targets.
+Author: Evlos
+Version: 1.0.3
+Author URI: http://rainmoe.com/
 */
 
 MUST::ins();
 
 class MUST {
 
-	private static $name = 'MUST';
-	private static $version = '1.0.1';
-	private static $ins;
-	private static $addons = array(
+	static $name = 'MUST';
+	static $version = '1.0.3';
+	static $ins;
+	static $addons = array(
 		'ftp' => 'MUST_ftp',
 	);
 
 	private function __construct() {
 		$this->wpInit();
-		$this->createOpt();
+		//$this->createOpt();
 	}
-	public static function ins() {
+	function ins() {
 		if (is_null(self::$ins))
 			self::$ins = new self();
 		return self::$ins;
 	}
 
-	public static function arrayRewrite($default, $changed) {
+	function arrayRewrite($default, $changed) {
 		foreach ($default as $key => $val) {
 			if (isset($changed[$key])) $default[$key] = $changed[$key];
 		}
 		return $default;
 	}
-	public static function zip($data) {
+	function zip($data) {
 		return json_encode($data);
 	}
-	public static function unzip($data) {
+	function unzip($data) {
 		return json_decode($data, true);
 	}
-	public static function singleOpt($changed = array()) {
+
+	function singleOpt($changed = array()) {
 		$opt = array(
 			'name' => '',
 			'type' => '',
@@ -56,15 +57,20 @@ class MUST {
 		return empty($opt) ? array() : json_decode($opt, true);
 	}
 	function refreshOpt() {
-		//Notice
+		// Notice
 	}
 	function putOpt($changed) {
 		$res = update_option(self::$name.'_option', json_encode($changed));
-		$this->refreshOpt();
+		self::refreshOpt();
 		return $res;
 	}
 	function getMT() {
-		return get_option(self::$name.'_mtarget');
+		$res = get_option(self::$name.'_mtarget', '');
+		if (self::isNoLocal()&&($res=='-1'||empty($res))) {
+			// IMP
+			return $res;
+		}
+		else return $res;
 	}
 	function putMT($data) {
 		return update_option(self::$name.'_mtarget', $data);
@@ -73,23 +79,39 @@ class MUST {
 		return get_post_meta($pid, self::$name.'_'.$key, true);
 	}
 	function putPM($pid, $key, $data) {
-		update_post_meta($pid, self::$name.'_'.$key, $data);
-	}
-		
+		return update_post_meta($pid, self::$name.'_'.$key, $data);
+	}	
 	function createOpt() {
-		if (!$this->opt = get_option(self::$name.'_option')) {
+		if (!get_option(self::$name.'_option')) {
 			update_option(self::$name.'_option', '');
 		}
+		// Useless
 	}
+	function readOpt($name) {
+		return get_option(self::$name.'_option_'.$name, '');
+	}
+	function setOpt($name, $data) {
+		return update_option(self::$name.'_option_'.$name, $data);
+	}
+
+	function isNoLocal() {
+		return self::readOpt('nolocal') == 'yes' ? true : false;
+	}
+	function setNoLocal() {
+		return self::setOpt('nolocal', 'yes');
+	}
+
 	function wpInit() {
 		add_action('admin_menu', array($this, 'adminMenu'));
 		//add_action('wp_enqueue_scripts', array($this, 'addScripts'));
 		//add_action('wp_head', array($this, 'addText2Header'));
 
-		if ($this->getMT()!=''&&$this->urlCurrent()!='')
+		if (self::getMT()!=''&&self::urlCurrent()!='')
 			add_filter('the_content', array($this, 'addAfterTheContent'));
 
-		add_action('add_attachment', array($this, 'addAfterAttachmentUploadedCompleted'));
+		add_action('save_post', array($this, 'addWhenSavingPost'));
+
+		if (self::isNoLocal()) self::putMT(0);
 	}
 	function addScripts() {
 		wp_enqueue_script('jquery');
@@ -97,11 +119,9 @@ class MUST {
 	function addStyle() {
 		wp_enqueue_style('/wp-admin/css/colors-classic.css');
 	}
-	function addAfterTheContent($content) {
-		return str_replace($this->urlDefault(), $this->urlCurrent(), $content);
-	}
-	function addAfterAttachmentUploadedCompleted() {
-		$this->upload();
+	function addWhenSavingPost($aid) {
+		if (self::isNoLocal()) self::uploadA(false, false, $aid);
+		else self::upload();
 	}
 	function addText2Header() {
 		//FIX later
@@ -117,19 +137,26 @@ class MUST {
 		});
 		jQuery(document).ready(function($){
 			$(".entry-content img").each(function(){
-				//$(this).attr("src", $(this).attr("src").replace("'.$this->urlDefault().'", "'.$this->urlCurrent().'"));
+				//$(this).attr("src", $(this).attr("src").replace("'.self::urlDefault().'", "'.self::urlCurrent().'"));
 				//$(this).css("display", "block");
 			});
 		});
 		</script>';
 	}
 	
-	static function readAttachments() {
+	function readAttachments() {
 		global $wpdb;
 		return array_reverse($wpdb->get_results("
 			SELECT * FROM {$wpdb->posts}
 			WHERE post_status = 'inherit' AND post_type = 'attachment'
 		"));
+	}
+	function readArticles($aid = -1) {
+		global $wpdb;
+		if ($aid == -1)
+			return array_reverse($wpdb->get_results("SELECT * FROM {$wpdb->posts} WHERE post_type = 'post'"));
+		else
+			return array_reverse($wpdb->get_results("SELECT * FROM {$wpdb->posts} WHERE post_type = 'post' AND ID = {$aid}"));
 	}
 	/*
 	 * $res refer to
@@ -144,14 +171,14 @@ class MUST {
 		)
 	 * 
 	 */
-	static function splitUrl($guid) {
+	function splitUrl($guid) {
 		$regex = '/wp-content\/uploads\/([0-9]+)\/([0-9]+)\/(.+)$/i';
 		preg_match($regex, $guid, $res);
 		$dir = wp_upload_dir();
 		$res[] = $dir['basedir'];
 		return $res;
 	}
-	public static function linko($pid) {
+	function linko($pid) {
 		global $wpdb;
 		return $wpdb->get_var("
 			SELECT guid FROM {$wpdb->posts}
@@ -159,14 +186,13 @@ class MUST {
 		");
 	}
 	function link($pid) {
-		$MT = $this->getMT();
+		$MT = self::getMT();
 		$url = getPM($pid, 'link_'.$MT);
 		if (!empty($url)) return $url;
 		else {
 			return self::linko($pid);
 		}
 	}
-
 	function isRemoteFileExists($url) {
 		$ch = curl_init($url);
 		curl_setopt($ch, CURLOPT_NOBODY, true);
@@ -176,47 +202,63 @@ class MUST {
 
 		return ($retcode==200);
 	}
+	function isReplaced() {
+		$opt = self::getOpt();
+		if (self::isNoLocal()&&!empty($opt)) return true;
+		if (empty($opt)) return false;
+		$MT = self::getMT();
+		if (empty($MT)||$MT == '-1') return false;
+		return true;
+	}
 	function urlDefault() {
 		return site_url().'/wp-content/uploads/';
 	}
 	function urlCurrent() {
-		$MT = $this->getMT();
-		if ($MT=='') return '';
-		$opt = $this->getOpt();
+		$MT = self::getMT();
+		$opt = self::getOpt();
 		return $opt[$MT]['conn']['folder_url'];
-		//print_r($opt[$MT]);
+	}
+	function addAfterTheContent($content) {
+		if (self::isReplaced())
+			return str_replace(self::urlDefault(), self::urlCurrent(), $content);
+		else
+			return $content;
 	}
 	
-	function upload($echo = false) {
+	function upload($echo = false, $check = false) {
 		set_time_limit(600);
-		$opt = $this->getOpt();
+		$opt = self::getOpt();
 		foreach ($opt as $key => $val) {
 			if ($val['enable']) {
 				$conn = $val['conn'];
 				$attach = self::readAttachments();
 				foreach ($attach as $val) {
 					$isReady = true;
+
 					//Check remote ifUploaded
-					if (function_exists('curl_init')) {
-						$rurl = $this->getPM($val->ID, 'link_'.$key);
-						if ($rurl!=''&&$this->isRemoteFileExists($rurl)) {
-							$isReady = false;
+					if ($check)
+						if (function_exists('curl_init')) {
+							$rurl = self::getPM($val->ID, 'link_'.$key);
+							if ($rurl!=''&&self::isRemoteFileExists($rurl)) {
+								$isReady = false;
+							}
 						}
-					}
-					else {
-						if ($echo) echo '* cUrl is not installed, file will be uploaded without exists check ...'."\r\n";
-					}
+						else {
+							if ($echo) echo '* cUrl is not installed, file will be uploaded without exists check ...'."\r\n";
+						}
+
 					//Check ifUploaded
-						//$nurl = $this->getPM($val->ID, 'link_'.$key);
-						//if (empty($nurl)) $isReady = true;
+					$tmp = self::getPM($val->ID, 'link_'.$key);
+					if (empty($tmp)) $isReady = true;
+
 					//Upload
 					if ($isReady) {
 						$nurl = MUST_ftp::upload(self::splitUrl($val->guid), $conn);
-						if ($nurl) $this->putPM($val->ID, 'link_'.$key, $nurl);
+						if ($nurl) self::putPM($val->ID, 'link_'.$key, $nurl);
 						if ($echo) echo '* '.$val->guid.' uploaded to '.$nurl.' ...'."\r\n";
 					}
 					else {
-						if ($echo) echo '* '.$val->guid.' existed in remote ...'."\r\n";
+						if ($echo) echo '* '.$val->guid.' remote existed ...'."\r\n";
 					}
 				}
 			}
@@ -227,32 +269,40 @@ class MUST {
 		$page = add_menu_page('WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageReadMe'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 		$page = add_submenu_page(__FILE__, 'WP-MUST', 'WP-MUST', 'administrator', __FILE__, array($this, 'pageReadMe'));
-		$page = add_submenu_page(__FILE__, 'WP-MUST InMedia', 'WP-MUST InMedia', 'administrator', 'MUSTpageInMedia', array($this, 'pageList'));
-		$page = add_submenu_page(__FILE__, 'WP-MUST InFolder', 'WP-MUST InFolder', 'administrator', 'MUSTpageInFolder', array($this, 'pageInFolder'));
+		if (self::isNoLocal())
+			$page = add_submenu_page(__FILE__, 'WP-MUST InArticles', 'WP-MUST InArticles', 'administrator', 'MUSTpageInArticles', array($this, 'pageInArticles'));
+		else
+			$page = add_submenu_page(__FILE__, 'WP-MUST InMedia', 'WP-MUST InMedia', 'administrator', 'MUSTpageInMedia', array($this, 'pageList'));
 		$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageSetting', array($this, 'pageSetting'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 	}
 	function pageList() {
-		$opt = $this->getOpt();
+		$opt = self::getOpt();
 		?>
 		<div style="margin: 4px 15px 0 0;">
 		<!-- div -->
-			<h2>WP-MultiTarget-Uploads-Sync-Tool</h2>
+			<h2>WP-MultiTarget-Uploads-Sync-Tool Attachments in Media Library</h2>
 			<div>
 				<form action="" method="POST" style="display:inline;">
 					<input type="hidden" name="do" value="upload" />
 					<input type="submit" value="Upload All" />
 				</form>
-				<!--<form action="" method="POST" style="display:inline;">
-					<input type="hidden" name="do" value="update" />
-					<input type="submit" value="Update Posts" />
-				</form>-->
+				 - 
+				<form action="" method="POST" style="display:inline;">
+					<input type="hidden" name="do" value="check"/>
+					<input type="submit" value="Check All" />
+				</form>
 			</div>
 			<?php
-			if (isset($_POST['do'])&&$_POST['do']=='upload') {
-				echo '<br /><textarea style="width: 100%; height: 120px;">';
-				$this->upload(true);
-				echo '</textarea><br />';
+			if (isset($_POST['do'])) {
+				if ($_POST['do']=='upload') {
+					echo '<br /><textarea style="width: 100%; height: 120px;">';
+					self::upload(true);
+					echo '</textarea><br />';
+				}
+				else if ($_POST['do']=='check') {
+					self::upload(true, true);
+				}
 			}
 			?>
 			<br />
@@ -270,7 +320,7 @@ class MUST {
 					<td><a target="_blank" href="'.$val->guid.'">'.$res[3].'</a></td>';
 					foreach ($opt as $key_ => $val_) {
 						echo '<td>';
-						$url = $this->getPM($val->ID, 'link_'.$key_);
+						$url = self::getPM($val->ID, 'link_'.$key_);
 						if (!$url) echo '<span style="color:grey;">None</span>';
 						else echo '<a target="_blank" href="'.$url.'" style="color:green;">OPEN</a>';
 						// - <a target="_blank" href="#" style="color:green;">UPLOAD</a>
@@ -285,8 +335,8 @@ class MUST {
 		<?php
 	}
 	function pageSetting() {
-		$opt = $this->getOpt();
-		$MT = $this->getMT();
+		$opt = self::getOpt();
+		$MT = self::getMT();
 		if (isset($_POST['do'])) {
 			$do = $_POST['do'];
 			//print_r($_POST);
@@ -302,11 +352,13 @@ class MUST {
 						$tmp[str_replace($count.'_', '', $key)] = $val;
 					}
 					$singleSet = MUST_ftp::set($tmp);
+					if (self::isNoLocal()) $enable = 0;
+					else $enable = isset($_POST[$count.'_enable']) ? 1 : 0;
 					$opt_[$count] = self::singleOpt(array(
 						'name' => $_POST[$count.'_name'],
 						'type' => $_POST[$count.'_type'],
 						'conn' => $singleSet,
-						'enable' => (isset($_POST[$count.'_enable']) ? 1 : 0),
+						'enable' => $enable,
 					));
 					$count++;
 				}
@@ -319,6 +371,9 @@ class MUST {
 			}
 			elseif ($do == 'clearmtarget') {
 				self::putMT('-1');
+			}
+			elseif ($do == 'nolocalforsure') {
+				self::setNoLocal();
 			}
 		}
 		?>
@@ -351,6 +406,7 @@ class MUST {
 		<!-- div -->
 			<h2>WP-MultiTarget-Uploads-Sync-Tool Setting</h2>
 			<div>
+				<?php if (!self::isNoLocal()||empty($opt)): ?>
 				<form action="" method="POST" style="display:inline;">
 					New Target:
 					<select name="add_type"><?php foreach (self::$addons as $key => $val) : ?>
@@ -359,21 +415,46 @@ class MUST {
 					<input type="hidden" name="do" value="add" />
 					<input type="submit" value="Add" />
 				</form>
-				<?php if (!empty($opt)): ?>
+				<?php endif; ?>
+
+				<?php if (!self::isNoLocal()&&!empty($opt)) : ?>
 					<form action="" method="POST" style="display:inline;">
 						 - Current Target:
 						<select name="mtarget"><?php $choosed = false; foreach ($opt as $key_ => $val_): ?>
 							<?php if ($MT == $key_) $choosed = true; ?>
 							<option value="<?php echo $key_; ?>"<?php echo $MT == $key_ ? ' selected' : ''; ?>><?php echo $val_['name']; ?></option>
-						<?php endforeach; ?><?php echo $choosed ? '' : '<option value="-1" selected>-</option>'; ?></select>
+						<?php endforeach; ?><?php if (!self::isNoLocal()) echo $choosed ? '' : '<option value="-1" selected>-</option>'; ?></select>
 						<input type="hidden" name="do" value="mtarget" />
 						<input type="submit" value="Set" />
 					</form>
+
+					<form action="" method="POST" style="display:inline;">
+						<input type="hidden" name="do" value="clearmtarget" />
+						- <input type="submit" value="Stop url replacement" />
+					</form>
 				<?php endif; ?>
-				<form action="" method="POST" style="display:inline;">
-					<input type="hidden" name="do" value="clearmtarget" />
-					- <input type="submit" value="Stop url replacement" />
-				</form>
+
+				<?php if (self::isNoLocal()) : ?>
+					No Local Mode: 
+					<span style="color:green;">ENABLED</span>
+				<?php else: ?>
+					 - No Local Mode: 
+					<?php if (isset($_POST['do'])&&$_POST['do']=='nolocal') : ?>
+						<form action="" method="POST" style="display:inline;">
+							<input type="hidden" name="do" value="nolocalforsure" />
+							<input type="submit" value="I am Sure" /> (Are you sure? There is no turning back.)
+						</form>
+					<?php else : ?>
+						<form action="" method="POST" style="display:inline;">
+							<input type="hidden" name="do" value="nolocal" />
+							<input type="submit" value="Enable" />
+						</form>
+					<?php endif; ?>
+				<?php endif; ?>
+				
+				<?php if (self::isNoLocal() && $MT == '-1') : ?>
+				<span style="color:red;">- Warning: No main target! One must be choosen!</span>
+				<?php endif; ?>
 			</div>
 			<br />
 			<div>
@@ -381,9 +462,16 @@ class MUST {
 					<form action="" method="POST">
 						<table class="widefat">
 							<thead><th>Enable</th></th><th>ID</th><th>Name</th><th>Type</th><th>Connection</th></thead>
-							<?php foreach ($opt as $key_ => $val_): ?>
+							<?php $count = 0; foreach ($opt as $key_ => $val_): ?>
+								<?php if (self::isNoLocal()&&$count++==1) break; ?>
 								<tr id="target-<?php echo $key_; ?>">
-									<td><input type="checkbox" name="<?php echo $key_; ?>_enable"<?php echo $val_['enable'] ? ' checked' : '';?> /></td>
+									<td>
+										<?php if (self::isNoLocal()) : ?>
+											<input type="checkbox" name="<?php echo $key_; ?>_none" disabled=disabled />
+										<?php else : ?>
+											<input type="checkbox" name="<?php echo $key_; ?>_enable"<?php echo $val_['enable'] ? ' checked' : '';?> />
+										<?php endif; ?>
+									</td>
 									<td><?php echo $key_; ?></td>
 									<td><input type="text" name="<?php echo $key_; ?>_name" value="<?php echo $val_['name']; ?>" /></td>
 									<td><?php echo strtoupper($val_['type']); ?></td>
@@ -411,14 +499,13 @@ class MUST {
 				<?php endif; ?>
 			</div>
 			<br />
-			Default URL: <?php echo $this->urlDefault(); ?>
+			Default URL: <?php echo self::urlDefault(); ?>
 			<br />
-			Current URL: <?php $j = $this->urlCurrent(); echo $j=='' ? 'url will not be replaced.' : $j; ?>
+			Current URL: <?php echo self::isReplaced() ? self::urlCurrent() : 'disabled.'; ?>
 		<!-- div -->
 		</div>
 		<?php
 	}
-
 	function pageReadMe() {
 		?>
 		<div style="margin: 4px 15px 0 0;">
@@ -429,7 +516,8 @@ class MUST {
 			</div>
 			<div>
 				<h3>For English Users:</h3>
-				<p>This is a WordPress Multiple Targets Sync Tool, which means you are able to add multiple targets with FTP supported (Currently), and sync attachments to these targets. <br />Also, it is possible to use the url of attachments in these targets to show on fontend.</p>
+				<p>This is a WordPress Multiple Targets Sync Tool, which means you are able to add multiple targets with FTP supported (Currently), and sync attachments to these targets. 
+					<br />Also, it is possible to use the url of attachments in one of these targets to show on fontend.</p>
 				<p>Steps:</p>
 				<ul>
 					<li>1. Create an new target.</li>
@@ -441,7 +529,7 @@ class MUST {
 			</div>
 			<div>
 				<h3>For Chinese Users:</h3>
-				<p>这是一个 WordPress 多目标（图床）附件同步工具。你可以添加多个图床，当然目前仅支持 FTP 图床。设置完成后附件就能够被同步到这些图床，并从这些图床调用显示。</p>
+				<p>这是一个 WordPress 多目标（图床）附件同步工具。你可以添加多个图床，当然目前仅支持 FTP 图床。设置完成后附件就能够被同步到这些图床，并从某一图床调用显示。</p>
 				<p>步骤:</p>
 				<ul>
 					<li>1. 先新建一个 target，即新建同步目标。</li>
@@ -451,11 +539,21 @@ class MUST {
 					<li>5. 到文件列表处点 Upload All 即可。以后传的附件会自动被同步。</li>
 				</ul>
 			</div>
+			<div>
+				<h3>FTP example:</h3>
+				<ul>
+					<li>Host: example.com</li>
+					<li>Username: example_username</li>
+					<li>Password: example_passweord</li>
+					<li>Folder: public_html/example/</li>
+					<li>Folder URL: http://example.com/example/</li>
+					<li>Port: 21</li>
+				</ul>
+			</div>
 		<!-- div -->
 		</div>
 		<?php
 	}
-
 	function pageInFolder() {
 		?>
 		<div style="margin: 4px 15px 0 0;">
@@ -463,13 +561,126 @@ class MUST {
 			<h2>WP-MultiTarget-Uploads-Sync-Tool Files in Uploads Folder</h2>
 			<div>
 				<h3>I am working on it.</h3>
-				<p>It should be completed on version 1.0.2</p>
+				<p>It should be completed on later version.</p>
 			</div>
 		<!-- div -->
 		</div>
 		<?php
 	}
 
+	/*function getKeywords() {
+		return self::readOpt('keywords');
+	}
+	function setKeywords() {
+		return self::setOpt('keywords', 'yes');
+	}*/
+	function uploadA($echo = true, $check = false, $aid = -1) {
+		set_time_limit(600);
+		$data = self::readArticles($aid);
+		$opt = self::getOpt();
+		$conn = $opt[0]['conn'];
+		foreach ($data as $val) {
+			$tmp = $val->post_content;
+			preg_match_all("/".str_replace('/', '\/', self::urlDefault())."[^\"]+/i", $tmp, $res);
+			foreach ($res[0] as $img) $final[md5($img)] = $img;
+			foreach (array_unique($final) as $key => $img) {
+				$isReady = true;
+				$ourl = self::getPM($val->ID, 'link_'.$key, $nurl);
+
+				// Check remote ifUploaded
+				if ($check) {
+					if (function_exists('curl_init')) {
+						if ($ourl != ''&&self::isRemoteFileExists($ourl)) {
+							echo '* '.$img.' remote file existed ...'."\r\n";
+							$isReady = false;
+						}
+					}
+					else {
+						if ($echo) echo '* cUrl is not installed, file will be uploaded without exists check ...'."\r\n";
+					}
+				}
+				else {
+					if ($ourl != '') {
+						echo '* '.$img.' remote record existed ...'."\r\n";
+						$isReady = false;
+					}
+				}
+
+				if ($isReady) {
+					$nurl = MUST_ftp::upload(self::splitUrl($img), $conn);
+					if ($nurl) self::putPM($val->ID, 'link_'.$key, $nurl);
+					if ($echo) echo '* '.$img.' uploaded to '.$nurl.' ...'."\r\n";
+				}
+			}
+		}
+	}
+	function pageInArticles() {
+		$opt = self::getOpt();
+		?>
+		<div style="margin: 4px 15px 0 0;">
+		<!-- div -->
+			<h2>WP-MultiTarget-Uploads-Sync-Tool Attachments in Articles</h2>
+			<div>
+				<form action="" method="POST" style="display:inline;">
+					<input type="hidden" name="do" value="upload"/>
+					<input type="submit" value="Upload All" />
+				</form>
+				 - 
+				<form action="" method="POST" style="display:inline;">
+					<input type="hidden" name="do" value="check"/>
+					<input type="submit" value="Check All" />
+				</form>
+			</div>
+			<?php
+			if (isset($_POST['do'])) {
+				echo '<br /><textarea style="width: 100%; height: 120px;">';
+				if ($_POST['do']=='upload') {
+					self::uploadA();
+				}
+				else if ($_POST['do']=='check') {
+					self::uploadA(true, true);
+				}
+				else if ($_POST['do']=='uploadone') {
+					$aid = $_POST['aid'];
+					self::uploadA(true, true, $aid);
+				}
+				echo '</textarea><br />';
+			}
+			?>
+			<br />
+			<table class="widefat">
+				<?php
+				$data = self::readArticles();
+				
+				echo '<thead><th>ID</th><th>User</th><th>Date</th><th>Title</th><th>Images</th><th>Control</th></thead>';
+				//print_r($data);
+				foreach ($data as $val) {
+					echo '<tr><td>'.$val->ID.'</td><td>'.get_user_meta($val->post_author, 'nickname', true).'</td>
+					<td>'.$val->post_date_gmt.'</td><td>'.$val->post_title.'</td><td><table class="widefat child">
+					<thead><th>CurrentURL</th></thead>';
+					$tmp = $val->post_content;
+					preg_match_all("/".str_replace('/', '\/', self::urlDefault())."[^\"]+/i", $tmp, $res);
+					//print_r($res);
+					$final = array();
+					foreach ($res[0] as $img) $final[md5($img)] = $img;
+					foreach (array_unique($final) as $key => $img) {
+						$nurl = self::getPM($val->ID, 'link_'.$key, $nurl); //<td>'.$img.'</td>
+						echo '<tr><td>'.(empty($nurl) ? '-' : '<a target="_blank" href="'.$nurl.'">'.$nurl.'</a>').'</td></tr>';
+					}
+					echo '</table></td><td>
+					<form action="" method="POST" style="display:inline;">
+					<input type="hidden" name="do" value="uploadone"/>
+					<input type="hidden" name="aid" value="'.$val->ID.'"/>
+					<input type="submit" value="Upload This" />
+					</form>
+					</td></tr>';
+				}
+				?>
+			</table>
+		<!-- div -->
+		</div>
+		<?php
+	}
 }
 
 class MUST_ftp {
@@ -513,4 +724,4 @@ class MUST_ftp {
 	
 }
 
-//Made by Evlos >w< ||
+// Made by Evlos >w< ||
