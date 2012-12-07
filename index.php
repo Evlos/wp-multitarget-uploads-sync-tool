@@ -609,7 +609,7 @@ class MUST {
 				if ($check) {
 					if (function_exists('curl_init')) {
 						if ($ourl != ''&&self::isRemoteFileExists($ourl)) {
-							echo '* '.$img.' remote file existed ...'."\r\n";
+							if ($echo) echo '* '.$img.' remote file existed ...'."\r\n";
 							$isReady = false;
 							$needClear = true;
 						}
@@ -619,7 +619,7 @@ class MUST {
 					}
 				}
 				if ($ourl != '') {
-					echo '* '.$img.' remote record existed ...'."\r\n";
+					if ($echo) echo '* '.$img.' remote record existed ...'."\r\n";
 					$isReady = false;
 				}
 
@@ -742,12 +742,13 @@ class MUST_ftp {
 		$ftp_user_name = $conn['username'];
 		$ftp_user_pass = $conn['password'];
 		$ftp_dst_dir = $conn['folder'];
-		
+		$ftp_port = $conn['port']; #Fixed
+
 		$dir_level = array($res[1], $res[2]);
 		
 		require_once plugin_dir_path(__FILE__).'/lib/ftp_do.php';
 
-		$final = MUST_ftp_do::ins($ftp_server, $ftp_user_name, $ftp_user_pass, $ftp_dst_dir, $dir_level)
+		$final = MUST_ftp_do::ins($ftp_server, $ftp_user_name, $ftp_user_pass, $ftp_dst_dir, $dir_level, $ftp_port)
 		->send($remote_file, $send_file, FTP_BINARY, $dir_level);
 		
 		$nurl = $conn['folder_url'].$res[1].'/'.$res[2].'/'.$res[3];

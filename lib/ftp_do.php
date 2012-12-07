@@ -9,6 +9,7 @@ class MUST_ftp_do {
 	private static $conn;
 	private static $result;
 	private static $dir_level;
+	private static $port; # Fixed
 	
 	private static $ins;
 
@@ -19,20 +20,21 @@ class MUST_ftp_do {
 		echo '* '.$msg." ...\r\n";
 	}
 	
-	public static function ins($host, $username, $password, $folder, $dir_level) {
+	public static function ins($host, $username, $password, $folder, $dir_level, $port = 21) {
 		self::$errors = false;
 		if (is_null(self::$ins))
-			self::$ins = new self($host, $username, $password, $folder, $dir_level);
+			self::$ins = new self($host, $username, $password, $folder, $dir_level, $port);
 		return self::$ins;
 	}
 
-	function MUST_ftp_do($host, $username, $password, $folder, $dir_level) {
+	function MUST_ftp_do($host, $username, $password, $folder, $dir_level, $port) {
 		if ($host!="" && $username!="" && $password!="" && $folder!="" && $dir_level!="") {
 			$this->host = $host;
 			$this->username = $username;
 			$this->password = $password;
 			$this->folder = $folder;
 			$this->dir_level = $dir_level;
+			$this->port = $port;
 		}
 		else {
 			$this->error('Connection information error.');
@@ -46,7 +48,7 @@ class MUST_ftp_do {
 	}
 
 	function connect() {
-		$this->conn = @ftp_connect($this->host);
+		$this->conn = @ftp_connect($this->host, $this->port);
 		$this->result = @ftp_login($this->conn, $this->username, $this->password);
 		
 		@ftp_pasv($this->conn, true);
