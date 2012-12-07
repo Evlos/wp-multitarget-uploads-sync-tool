@@ -4,7 +4,7 @@ Plugin Name: WP-MultiTarget-Uploads-Sync-Tool
 Plugin URI: http://rainmoe.com/
 Description: A WordPress plugin which able to sync attachments to multiple FTP targets.
 Author: evlos
-Version: 1.0.3
+Version: 1.0.4
 Author URI: http://rainmoe.com/
 */
 
@@ -13,7 +13,7 @@ MUST::ins();
 class MUST {
 
 	static $name = 'MUST';
-	static $version = '1.0.3';
+	static $version = '1.0.4';
 	static $ins;
 	static $addons = array(
 		'ftp' => 'MUST_ftp',
@@ -286,6 +286,7 @@ class MUST {
 		else
 			$page = add_submenu_page(__FILE__, 'WP-MUST InMedia', 'WP-MUST InMedia', 'administrator', 'MUSTpageInMedia', array($this, 'pageList'));
 		$page = add_submenu_page(__FILE__, 'WP-MUST Setting', 'WP-MUST Setting', 'administrator', 'MUSTpageSetting', array($this, 'pageSetting'));
+		$page = add_submenu_page(__FILE__, 'WP-MUST Changelog', 'WP-MUST Changelog', 'administrator', 'MUSTpageChangelog', array($this, 'pageChangelog'));
 		add_action('admin_print_styles-'.$page, array($this, 'addStyle'));
 	}
 	function pageList() {
@@ -566,6 +567,28 @@ class MUST {
 		</div>
 		<?php
 	}
+	function pageChangelog() {
+		?>
+		<div style="margin: 4px 15px 0 0;">
+		<!-- div -->
+			<h2>WP-MultiTarget-Uploads-Sync-Tool Changlog</h2>
+			<div>
+				<h3>Current version v<?php echo self::$version; ?></h3>
+			</div>
+			<div>
+				<h3>Changlog:</h3>
+				<ul>
+					<li>= 1.0.4 = Fixed no FTP port support</li>
+					<li>= 1.0.3 = Made no local mode works better</li>
+					<li>= 1.0.2 = Added no local mode</li>
+					<li>= 1.0.1 = Enhancement</li>
+					<li>= 1.0.0 = Init</li>
+				</ul>
+			</div>
+		<!-- div -->
+		</div>
+		<?php
+	}
 	function pageInFolder() {
 		?>
 		<div style="margin: 4px 15px 0 0;">
@@ -679,6 +702,31 @@ class MUST {
 			}
 			?>
 			<br />
+			<style type="text/css">
+			.widefat tr td .widefat {
+				border-color: #EEE;
+			}
+			.widefat tr td .widefat thead tr th {
+				background-image: none;
+				background: #fafafa;
+			}
+			.widefat tr td .widefat td, .widefat tr td .widefat th {
+				border-bottom-color: #eee;
+			}
+			input[disabled="disabled"] {
+				background: #eee;
+			}
+			.widefat .child input {
+				width: 120px;
+			}
+			input[type="submit"] {
+				padding: 3px 12px;
+				text-transform: uppercase;
+			}
+			.inputlong {
+				width: 600px;
+			}
+			</style>
 			<table class="widefat">
 				<?php
 				$data = self::readArticles();
